@@ -1,30 +1,20 @@
+// Bennett Taylor betaylor
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
+#include "bits.h"
+#include "mylist.h"
 
-unsigned int mirror(unsigned int input) {
-	int power = 1;
-	int powerInv = 31;
-	unsigned int output = 0;
-	while (powerInv != 0) {
-		if (input % (int)pow(2, power)) {
-			output += pow(2, powerInv);
-			input -= (int)pow(2, power - 1);		
-		}
-		power++;
-		powerInv--;
-	}
-	return output;
-}
-
-int main() {
+int main(int argc, char *argv[]) {
 	unsigned int test = 19088743;
-	printf("%u \n", mirror(test));
-
+	printf("%u \n", BinaryMirror(test));
+	
 	FILE *fp;
-	fp = fopen("input.txt", "r");
-	while (fgets(buffer, sizeof(buffer), fp) != NULL) {
-        	printf("%s", buffer);
+	char *line = NULL;
+	size_t len = 0;
+	fp = fopen(argv[1], "r");
+	while (getline(&line, &len, fp) != -1) {
+        	printf("%s", line);
     	}
+
 	return 0;
 }
