@@ -4,17 +4,50 @@
 #include "bits.h"
 #include "mylist.h"
 
-int main(int argc, char *argv[]) {
-	unsigned int test = 19088743;
-	printf("%u \n", BinaryMirror(test));
-	
+void createList(struct Node **head, char *fileName) {
 	FILE *fp;
 	char *line = NULL;
 	size_t len = 0;
-	fp = fopen(argv[1], "r");
+	struct Node *current = NULL;
+	fp = fopen(fileName, "r");
 	while (getline(&line, &len, fp) != -1) {
-        	printf("%s", line);
+		int index = 0;
+		while (index != -1) {
+			if (line[index] == '\n') {
+				line[index] = '\0';
+				index = -2;
+			}
+			index++;
+		}
+        	struct Node *next = createNode(line);
+		line = NULL;
+		if (*head == NULL) {
+			*head = next;
+			current = next;
+		}
+		else {
+			current->next = next;
+			current = next;
+		}
     	}
+}
 
+int main(int argc, char *argv[]) {
+	unsigned int test = 19088743;
+	printf("%u \n", BinaryMirror(test));
+
+	struct Node *head = NULL;
+	createList(&head, argv[1]);
+
+	struct Node *current = head;
+	while (current != NULL) {
+		printf("Unsigned int: %u \n", current->num);
+		printf("ASCII: %s \n", current->ASCII);
+		printf("Binary: %s \n\n", current->binary);
+		current = current->next;
+	}
+	head = mergeSortList(head);
+
+	freeList(head);
 	return 0;
 }
