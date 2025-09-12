@@ -38,15 +38,14 @@ int main(int argc, char *argv[]) {
 
 	struct Node *head = NULL;
 	createList(&head, argv[1]);
+	
+	printList(head);
 
-	struct Node *current = head;
-	while (current != NULL) {
-		printf("Unsigned int: %u \n", current->num);
-		printf("ASCII: %s \n", current->ASCII);
-		printf("Binary: %s \n\n", current->binary);
-		current = current->next;
-	}
+	printf("Now sorted: \n");
+	
 	head = mergeSortList(head);
+
+	printList(head);
 
 	freeList(head);
 	return 0;

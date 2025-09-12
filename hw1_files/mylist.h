@@ -12,6 +12,9 @@ typedef struct Node {
 
 // Function declarations
 struct Node *createNode(char *);
+void printList(struct Node *);
+int compareNodes(struct Node *, struct Node *);
+struct Node *mergeLists(struct Node *, struct Node *);
 struct Node *mergeSortList(struct Node *);
 void freeList(struct Node*);
 
