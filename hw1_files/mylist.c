@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "mylist.h"
+#include "bits.h"
 
 void printList(struct Node *head) {
 	struct Node *current = head;
@@ -10,8 +11,11 @@ void printList(struct Node *head) {
         while (current != NULL) {
 		printf("Index: %d \n", index);
                 printf("Unsigned int: %u \n", current->num);
+		printf("Mirror int: %u \n", current->mirror);
                 printf("ASCII: %s \n", current->ASCII);
+		printf("Mirror ASCII: %s \n", current->mirrorASCII);
                 printf("Binary: %s \n\n", current->binary);
+		printf("Sequences: %u \n", current->sequences);
                 current = current->next;
 		index++;
         }
@@ -20,14 +24,18 @@ void printList(struct Node *head) {
 struct Node *createNode(char *ASCII) {
 	int bits = sizeof(unsigned int) * 8;
 	struct Node *node = (struct Node*)malloc(sizeof(struct Node));
+	node->mirrorASCII = (char *) malloc(sizeof(char) * 12);
 	node->ASCII = ASCII;
 	node->num = (unsigned int)atoi(ASCII);
+	node->mirror = BinaryMirror(node->num);
+	sprintf(node->mirrorASCII, "%u", node->mirror);
 	node->binary = (char*)malloc(bits + 1);
 	node->binary[bits] = '\0';
+	node->sequences = CountSequence(node->num);
 
 	int index = 0;
 	while (index < bits) {
-		node->binary[index] = '0' + ((node->num & (1U << index)) != 0);
+		node->binary[bits - index - 1] = '0' + ((node->num & (1U << index)) != 0);
 		index++;
 	}
 	return node;
@@ -40,7 +48,7 @@ int compareNodes(struct Node *node1, struct Node *node2) {
 	if (node2 == NULL) {
 		return 1;
 	}
-	return strcmp(node1->ASCII, node2->ASCII) < 0;
+	return strcmp(node1->mirrorASCII, node2->mirrorASCII) < 0;
 }
 
 struct Node *mergeLists(struct Node *list1, struct Node *list2) {

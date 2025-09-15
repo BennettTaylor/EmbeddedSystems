@@ -7,6 +7,9 @@ typedef struct Node {
   char *ASCII;
   unsigned int num;
   char* binary;
+  unsigned int mirror;
+  char *mirrorASCII;
+  unsigned int sequences;
   struct Node *next;
 } Node;
 

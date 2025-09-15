@@ -33,8 +33,10 @@ void createList(struct Node **head, char *fileName) {
 }
 
 int main(int argc, char *argv[]) {
-	unsigned int test = 19088743;
-	printf("%u \n", BinaryMirror(test));
+	if (argc != 3) {
+		printf("ERROR: Enter arguements for input and output files\n");
+		return 1;
+	}
 
 	struct Node *head = NULL;
 	createList(&head, argv[1]);
