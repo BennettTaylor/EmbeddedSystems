@@ -1,5 +1,6 @@
 // Bennett Taylor betaylor
 #include <math.h>
+#include "bits.h"
 
 // BinaryMirror implementation
 unsigned int BinaryMirror(unsigned int input) {
@@ -13,7 +14,7 @@ unsigned int BinaryMirror(unsigned int input) {
 		// Add mirrored bit to binary mirror if bit is found
 		int bit = (input & (1U << index)) != 0;
 		if (bit) {
-			mirror += (1U << bound - index - 1);
+			mirror += (1U << (bound - index - 1));
 		}
 
 		index++;
@@ -34,8 +35,8 @@ unsigned int CountSequence(unsigned int input) {
 	while (index < bound - 2) {
 		// Generate bits for next set using a bitmask
 		int bit1 = (input & (1U << index)) != 0;
-		int bit2 = (input & (1U << index + 1)) != 0;
-		int bit3 = (input & (1U << index + 2)) != 0;
+		int bit2 = (input & (1U << (index + 1))) != 0;
+		int bit3 = (input & (1U << (index + 2))) != 0;
 		
 		// Check for pattern
 		if (!bit1 && bit2 && !bit3) {

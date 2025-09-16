@@ -4,13 +4,15 @@
 
 // Linked list node definition
 typedef struct Node {
-  char *ASCII;
-  unsigned int num;
-  char* binary;
-  unsigned int mirror;
-  char *mirrorASCII;
-  unsigned int sequences;
-  struct Node *next;
+	// Includes data about a number and it's binary mirror
+	char *ASCII;
+	unsigned int num;
+	char* binary;
+	unsigned int mirror;
+	char *mirrorASCII;
+	// Holds the frequency of "010" sequences found in the binary representation
+	unsigned int sequences;
+	struct Node *next;
 } Node;
 
 // Function declarations
