@@ -1,0 +1,11 @@
+Bennett Taylor betaylor@bu.edu
+
+Links I found helpful:
+1) https://linux.die.net/lkmpg/x569.html
+2) https://static.lwn.net/images/pdf/LDD3/ch07.pdf
+3) https://embetronicx.com/tutorials/linux/device-drivers/using-kernel-timer-in-linux-device-driver/
+
+Assumptions:
+1) A user will not change COUNT to a number less than the active number of timers
+2) Messages will not contain newline characters
+3) Other assumptions listed in the lab instructions

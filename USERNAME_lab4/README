@@ -1,0 +1,6 @@
+Bennett Taylor betaylor@bu.edu
+
+Resources I found most helpful:
+- https://docs.kernel.org/filesystems/seq_file.html
+- https://stackoverflow.com/questions/58639288/how-to-send-signal-from-linux-kernel-space-to-user-space-in-order-to-notify-abou
+- https://linux-kernel-labs.github.io/refs/heads/master/lectures/processes.html
