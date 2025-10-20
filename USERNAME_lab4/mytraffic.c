@@ -20,6 +20,7 @@ MODULE_LICENSE("Dual BSD/GPL");
 #define MAX_HZ 9
 #define MIN_HZ 1
 #define WRITE_BUF_SIZE 2
+#define INFO_BUF_SIZE 256
 
 /* Function declarations */
 static int mytraffic_init(void);
@@ -122,7 +123,39 @@ static int mytraffic_release(struct inode *inode, struct file *filp) {
 	return SUCCESS;
 }
 
+// if use 'cat /dev/mytraffic', output:
+// current_mode
+// is_red_on, is_yellow_on, is_red_on
+// is_ped_present (only if pedestrian call button is supported)
 static ssize_t mytraffic_read(struct file *file, char *buf, size_t len, loff_t *offset) {
+	char *info;
+	char *pInfo;
+	unsigned info_len;
+	
+	ssize_t ret_len;
+
+	info = kmalloc(INFO_BUF_SIZE, GFP_KERNEL);
+	if(!info) return -ENOMEM;
+	pInfo = info;
+
+	// first print current operational mode:
+	// ("normal", "flashing-red", or "flashing-yellow")
+	switch(current_mode){
+		case NORMAL:
+			break;
+		case FLASHING_RED:
+			break;
+		case FLASHING_YELLOW:
+			break;
+		default:
+			break;
+	}
+
+	// next print the current cycle rate (e.g. "1 Hz")
+
+	// next print current status of each light
+	// ("red off", "yellow off", "green on")
+
 	return len;
 }
 
