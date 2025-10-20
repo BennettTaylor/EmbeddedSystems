@@ -32,11 +32,11 @@ static ssize_t mytraffic_write(struct file *, const char *, size_t, loff_t *);
 static void timer_handler(struct timer_list *);
 
 /* Operational modes enum */
-enum mytraffic_mode {
+typedef enum {
 	NORMAL,
 	FLASHING_RED,
 	FLASHING_YELLOW
-};
+} mytraffic_mode;
 
 /* Timer structure */
 struct timer_entry {
@@ -46,12 +46,13 @@ struct timer_entry {
 
 /* Global driver variables */
 static int mytraffic_major = 61;
-static LIST_HEAD(timer_list);
+static struct timer_entry *mytraffic_timer = NULL;
 static unsigned is_green_on = 0;
 static unsigned is_yellow_on = 0;
 static unsigned is_red_on = 0;
 static unsigned is_ped_present = 0;
 static unsigned reset = 0;
+static unsigned cycle_index = 0;
 static unsigned cycle_rate = MIN_HZ;
 static mytraffic_mode current_mode = NORMAL;
 
@@ -85,23 +86,29 @@ static int mytraffic_init(void) {
 		return result;
 	}
 
+	/* Create timer */
+	mytraffic_timer = kmalloc(sizeof(struct timer_entry), GFP_KERNEL);
+	if (!mytraffic_timer) {
+		printk(KERN_ALERT "mytraffic: Failed to allocate memory for timer.\n");
+		return -ENOMEM;
+	}
+	timer_setup(&mytraffic_timer->timer, timer_handler, 0);
+
 	return SUCCESS;
 }
 
 /* Module exit */
 static void mytraffic_exit(void) {
-	struct timer_entry *entry, *tmp;
 
 	/* Unregister device */
 	unregister_chrdev(mytraffic_major, DEVICE_NAME);
 
-	/* Delete all active timers and free their memory */
-	list_for_each_entry_safe(entry, tmp, &timer_list, list) {
-		if (entry->is_active) {
-			del_timer_sync(&entry->timer);
+	/* Delete the timer if active and free its memory */
+	if (mytraffic_timer) {
+		if (timer_pending(&mytraffic_timer->timer)) {
+			del_timer_sync(&mytraffic_timer->timer);
 		}
-		list_del(&entry->list);
-		kfree(entry);
+		kfree(mytraffic_timer);
 	}
 
 	return;
@@ -162,10 +169,7 @@ static ssize_t mytraffic_read(struct file *file, char *buf, size_t len, loff_t *
 /* Handle mytraffic character device file write */
 static ssize_t mytraffic_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos) {
 	char *kernel_buf;
-	char *token;
-	char* kernel_buf_ptr;
-	unsigned long seconds = 0;
-	struct timer_entry *entry, *tmp;
+	char hz;
 
 	/* Prevent buffer overflow and limit copy size */
 	size_t len = (count < WRITE_BUF_SIZE) ? count : WRITE_BUF_SIZE;
@@ -183,130 +187,28 @@ static ssize_t mytraffic_write(struct file *filp, const char *buf, size_t count,
 		kfree(kernel_buf);
 		return -EFAULT;
 	}
-	kernel_buf[len] = '\0';
 
-	kernel_buf_ptr = kernel_buf;
+	kernel_buf[len - 1] = '\0';
 
-	/* If the buffer only contains null character, remove all timers */
-	if (kernel_buf[0] == '\0') {
-		list_for_each_entry_safe(entry, tmp, &timer_list, list) {
-                	if (entry->is_active) {
-				mytraffic_active--;
-                        	del_timer_sync(&entry->timer);
-                	}
-                	list_del(&entry->list);
-                	kfree(entry);
-		}
-		
-		/* End write */
-                kfree(kernel_buf);
-                *f_pos += count;
-                return count;
-	}
-
-	/* Check if changing number of timers supported */
-	if (kernel_buf[0] != '0') {
-		unsigned new_count = kernel_buf[0] - '0';
-		if (new_count < 1 || new_count > MAX_COUNT) {
-			printk(KERN_ALERT "mytraffic: The number of supported timers must be between 1 and %d.\n", MAX_COUNT);
-			return -EPERM;
-		}
-
-		/* Set new count */
-		mytraffic_count = new_count;
-
-		/* End write */
-		kfree(kernel_buf);
-		*f_pos += count;
-		return count;
-	}
-
-	/* Parse input from this format: '0\n<seconds>\n<message>\n' */
-	if (kernel_buf[1] != '\n') {
-		printk(KERN_ALERT "mytraffic: Write format error. Expect '1'-'5' for max, or '0\n<seconds>\n<message>\n' to set new timer.\n");
+	/* Extract and validate frequency value */
+	hz = kernel_buf[0] - '0';
+	if (hz < MIN_HZ || hz > MAX_HZ) {
+		printk(KERN_ALERT "mytraffic: Invalid frequency value.\n");
 		kfree(kernel_buf);
 		return -EINVAL;
 	}
 
-	kernel_buf_ptr += 2;
+	/* Update cycle rate */
+	cycle_rate = hz;
 
-	/* Parse seconds */
-	token = strsep(&kernel_buf_ptr, "\n");
-	if (!token) {
-		printk(KERN_ALERT "Write format error. Expect '1'-'5' for max, or '0\n<seconds>\n<message>\n' to set new timer.\n");
-		kfree(kernel_buf);
-		return -EINVAL;
+	/* Restart timer with new cycle rate */
+	if (mytraffic_timer) {
+		mod_timer(&mytraffic_timer->timer, jiffies + msecs_to_jiffies(1 / cycle_rate));
 	}
 
-	/* Get seconds */
-	if (kstrtoul(token, 10, &seconds) != 0) {
-		printk(KERN_ALERT "mytraffic: Invalid seconds format.\n");
-		kfree(kernel_buf);
-		return -EINVAL;
-	}
-
-	/* Check seconds bounds */
-	if (seconds <= 0 || seconds > MAX_SEC) {
-		printk(KERN_ALERT "mytraffic: Timer duration must be between 1 and %u seconds.\n", MAX_SEC);
-		return -EPERM;
-	}
-
-	/* Parse message */
-	token = strsep(&kernel_buf_ptr, "\n");
-	if (!token) {
-		printk(KERN_ALERT "mytraffic: Write format error. Expect '1'-'5' for max, or '0\n<seconds>\n<message>\n' to set new timer.\n");
-		kfree(kernel_buf);
-		return -EINVAL;
-	}
-
-	/* Check message length */
-	if (strlen(token) >= MAX_MSG) {
-		printk(KERN_ALERT "mytraffic: Message too long (max %d chars).\n", MAX_MSG - 1);
-		kfree(kernel_buf);
-		return -EINVAL;
-	}
-
-	/* Update timer if message already registered */
-	list_for_each_entry(entry, &timer_list, list) {
-		if (entry->is_active && strcmp(token, entry->message) == 0) {
-			/* Found existing timer, update it */
-			mod_timer(&entry->timer, jiffies + msecs_to_jiffies(seconds * 1000));
-		
-			/* End write */
-        		kfree(kernel_buf);
-        		*f_pos += count;
-        		return count;
-		}
-	}
-
-	/* If new timer would exceed max, exit */
-	if (mytraffic_active >= mytraffic_count) {
-		printk(KERN_ALERT "mytraffic: Capacity exceeded. Max active timers is %u.\n", mytraffic_count);
-		kfree(kernel_buf);
-		return -EPERM;
-	}
-
-	/* Check if calling process has registered a signal handler */
-	list_for_each_entry(entry, &timer_list, list) {
-		if (!entry->is_active && entry->calling_process == current) {
-                        /* Found signal handler */
-			strncpy(entry->message, token, MAX_MSG - 1);
-			entry->message[MAX_MSG - 1] = '\0';
-			entry->is_active = 1;
-			mytraffic_active++;
-                        mod_timer(&entry->timer, jiffies + msecs_to_jiffies(seconds * 1000));
-
-                        /* End write */
-                        kfree(kernel_buf);
-                        *f_pos += count;
-                        return count;
-                }
-        }
-
-	/* Signal handler was not found */
-	printk(KERN_ALERT "mytraffic: A signal handler must be instantiated before registering timer.\n");
+	*f_pos += len;
 	kfree(kernel_buf);
-	return -EINVAL;
+	return len;
 }
 
 /* Timer callback function */
@@ -314,5 +216,51 @@ static void timer_handler(struct timer_list *timer_ptr) {
 	/* Get parent structure from the timer_list pointer */
 	struct timer_entry *entry = container_of(timer_ptr, struct timer_entry, timer);
 
+	cycle_index++;
+
+	switch(current_mode) {
+		case NORMAL:
+			/* Normal mode traffic light sequence */
+			if (cycle_index < 3) {
+				is_green_on = 1;
+				is_yellow_on = 0;
+				is_red_on = 0;
+			} else if (cycle_index == 3) {
+				is_green_on = 0;
+				is_yellow_on = 1;
+				is_red_on = 0;
+			} else if (cycle_index > 3 && cycle_index < 6) {
+				is_green_on = 0;
+				is_yellow_on = 0;
+				is_red_on = 1;
+			}
+			else if (cycle_index >= 6) {
+				cycle_index = 0;
+				is_green_on = 1;
+				is_yellow_on = 0;
+				is_red_on = 0;
+			}
+			break;
+		case FLASHING_YELLOW:
+			/* Flashing yellow mode */
+			is_green_on = 0;
+			is_yellow_on = !is_yellow_on;
+			is_red_on = 0;
+			break;
+		case FLASHING_RED:
+			/* Flashing red mode */
+			is_green_on = 0;
+			is_yellow_on = 0;
+			is_red_on = !is_red_on;
+			break;
+	}
+		is_green_on = 0;
+		is_yellow_on = !is_yellow_on;
+		is_red_on = 0;
+	}
+
+	
+
+	mod_timer(&entry->timer, jiffies + msecs_to_jiffies(1 / cycle_rate));
 	return;
 }
