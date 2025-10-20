@@ -135,35 +135,86 @@ static int mytraffic_release(struct inode *inode, struct file *filp) {
 // is_red_on, is_yellow_on, is_red_on
 // is_ped_present (only if pedestrian call button is supported)
 static ssize_t mytraffic_read(struct file *file, char *buf, size_t len, loff_t *offset) {
-	char *info;
-	char *pInfo;
-	unsigned info_len;
-	
-	ssize_t ret_len;
+   char *info;
+   char *pInfo;
+   unsigned info_len;
+  
+   ssize_t ret_len;
 
-	info = kmalloc(INFO_BUF_SIZE, GFP_KERNEL);
-	if(!info) return -ENOMEM;
-	pInfo = info;
 
-	// first print current operational mode:
-	// ("normal", "flashing-red", or "flashing-yellow")
-	switch(current_mode){
-		case NORMAL:
-			break;
-		case FLASHING_RED:
-			break;
-		case FLASHING_YELLOW:
-			break;
-		default:
-			break;
-	}
+   info = kmalloc(INFO_BUF_SIZE, GFP_KERNEL);
+   if(!info) return -ENOMEM;
+   pInfo = info;
 
-	// next print the current cycle rate (e.g. "1 Hz")
 
-	// next print current status of each light
-	// ("red off", "yellow off", "green on")
+   // first print current operational mode:
+   // ("normal", "flashing-red", or "flashing-yellow")
+   switch(current_mode){
+       case NORMAL:
+           pInfo += sprintf(pInfo, "Current operational mode: normal\n");
+           break;
+       case FLASHING_RED:
+           pInfo += sprintf(pInfo, "Current operational mode: flashing-red\n");
+           break;
+       case FLASHING_YELLOW:
+           pInfo += sprintf(pInfo, "Current operational mode: flashing-yellow\n");
+           break;
+   }
 
-	return len;
+
+   // next print the current cycle rate (e.g. "1 Hz")
+   pInfo += sprintf(pInfo, "Current cycle rate: %u\n", cycle_rate);
+
+
+   // next print current status of each light
+   // ("red off", "yellow off", "green on")
+   pInfo += sprintf(pInfo, "Current status of each light:\n");
+   if(is_red_on){
+       pInfo += sprintf(pInfo, "red on\n");
+   }else{
+       pInfo += sprintf(pInfo, "red off\n");
+   }
+
+
+   if(is_yellow_on){
+       pInfo += sprintf(pInfo, "yellow on\n");
+   }else{
+       pInfo += sprintf(pInfo, "yellow off\n");
+   }
+
+
+   if(is_green_on){
+       pInfo += sprintf(pInfo, "green on\n");
+   }else{
+       pInfo += sprintf(pInfo, "green off\n");
+   }
+   /* Terminate info buffer (not strictly needed for snprintf/sprintf but good for strlen) */
+   pInfo = '\0';
+
+
+   /* check user buffer size */
+   info_len = strlen(info);
+   if(*offset > info_len){
+       kfree(info);
+       return 0;
+   }
+
+
+   ret_len = info_len - *offset;
+   if(len < ret_len){
+       ret_len = len;
+   }
+
+
+   if(copy_to_user(buf, info + *offset, ret_len)){
+       kfree(info);
+       return -EFAULT;
+   }
+
+
+   *offset += ret_len;
+   kfree(info);
+   return ret_len;
 }
 
 /* Handle mytraffic character device file write */
