@@ -39,7 +39,8 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Usage: ./%s <file.assembly>\n", argv[0]);
         return EXIT_FAILURE;
     }
-
+    
+    
     /* Open file */
     FILE *file = fopen(argv[1], "r");
     if (!file) {
