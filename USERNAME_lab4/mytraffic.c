@@ -304,13 +304,7 @@ static void timer_handler(struct timer_list *timer_ptr) {
 			is_yellow_on = 0;
 			is_red_on = !is_red_on;
 			break;
-	}
-		is_green_on = 0;
-		is_yellow_on = !is_yellow_on;
-		is_red_on = 0;
-	}
-
-	
+		}
 
 	mod_timer(&entry->timer, jiffies + msecs_to_jiffies(1 / cycle_rate));
 	return;
