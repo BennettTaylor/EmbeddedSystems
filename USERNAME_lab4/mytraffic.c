@@ -12,6 +12,12 @@
 #include <linux/timer.h>
 #include <linux/string.h>
 
+/* led & gpio headers */
+#include <linux/platform_device.h>
+#include <linux/gpio/consumer.h>
+#include <linux/leds.h>
+#include <linux/leds-gpio.h>
+
 MODULE_LICENSE("Dual BSD/GPL");
 
 /* Driver constants */
@@ -30,6 +36,10 @@ static int mytraffic_release(struct inode *, struct file *);
 static ssize_t mytraffic_read(struct file *file, char *buf, size_t len, loff_t *offset);
 static ssize_t mytraffic_write(struct file *, const char *, size_t, loff_t *);
 static void timer_handler(struct timer_list *);
+
+/* led & gpio function declarations */
+static int myled_init(void);
+static void myled_exit(void);
 
 /* Operational modes enum */
 typedef enum {
