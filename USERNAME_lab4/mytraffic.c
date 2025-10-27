@@ -29,6 +29,7 @@ MODULE_LICENSE("Dual BSD/GPL");
 #define RED 67
 #define BTN0 26
 #define BTN1 46
+#define DEBOUNCE_TIME 50 // debounce time for buttons (in ms)
 
 /* Function declarations */
 static int mytraffic_init(void);
@@ -39,6 +40,7 @@ static ssize_t mytraffic_read(struct file *file, char *buf, size_t len, loff_t *
 static ssize_t mytraffic_write(struct file *, const char *, size_t, loff_t *);
 static void timer_handler(struct timer_list *);
 static irqreturn_t interrupt_handler(int, void *);
+static void debounce_timer_handler(struct timer_list *);
 
 /* Operational modes enum */
 typedef enum {
@@ -53,6 +55,19 @@ struct timer_entry {
 	struct list_head list;
 };
 
+<<<<<<< HEAD
+=======
+/* Debounce timer structure */
+static struct timer_list debounce_timer; // for debouncing buttons
+
+/* GPIO structure */
+struct gpio {
+        unsigned        gpio;
+        unsigned long   flags;
+        const char      *label;
+};
+
+>>>>>>> 321393d (Added debouncer timer for buttons and skeleton of debounce_timer_handler)
 /* Global driver variables */
 static int mytraffic_major = 61;
 static struct timer_entry *mytraffic_timer = NULL;
@@ -437,3 +452,10 @@ static irqreturn_t interrupt_handler(int irq, void *dev_id) {
 	}
 	return IRQ_HANDLED;
 }
+<<<<<<< HEAD
+=======
+
+static void debounce_timer_handler(struct timer_list *t){
+
+}
+>>>>>>> 321393d (Added debouncer timer for buttons and skeleton of debounce_timer_handler)
