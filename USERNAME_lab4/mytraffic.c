@@ -66,6 +66,7 @@ struct gpio {
 };
 
 /* Global driver variables */
+static unsigned bulb_check = 0; // for extra "lightbulb check"
 static int mytraffic_major = 61;
 static struct timer_entry *mytraffic_timer = NULL;
 static unsigned is_green_on = 0;
@@ -74,7 +75,6 @@ static unsigned is_red_on = 0;
 static unsigned is_ped_present = 0;
 static unsigned cycle_index_ped = 0;
 static unsigned reset = 0;
-static unsigned cycle_index_ped = 0;
 static unsigned cycle_index = 0;
 static unsigned cycle_rate = MIN_HZ;
 static mytraffic_mode current_mode = NORMAL;
@@ -133,6 +133,8 @@ static int mytraffic_init(void) {
 		return -ENOMEM;
 	}
 	timer_setup(&mytraffic_timer->timer, timer_handler, 0);
+	/* Create debouncer timer */
+	timer_setup(&debounce_timer, debounce_timer_handler, 0);
 
 	/* Request LED GPIOs */
 	result = gpio_request_array(led_gpios, num_led_gpios);
@@ -164,6 +166,16 @@ static int mytraffic_init(void) {
 		return result;
 	}
 
+	is_green_on  = 1;
+	is_yellow_on = 0;
+	is_red_on    = 0;
+
+	gpio_set_value(led_gpios[0].gpio, is_green_on);
+	gpio_set_value(led_gpios[1].gpio, is_yellow_on);
+	gpio_set_value(led_gpios[2].gpio, is_red_on);
+
+	mod_timer(&mytraffic_timer->timer, jiffies + msecs_to_jiffies(1000 / cycle_rate));
+
 	return SUCCESS;
 }
 
@@ -181,6 +193,14 @@ static void mytraffic_exit(void) {
 			del_timer_sync(&mytraffic_timer->timer);
 		}
 		kfree(mytraffic_timer);
+	}
+
+	/* Delete the debouncer timer if active and free its memory */
+	if(debounce_timer){
+		if(timer_pending(&debounce_timer->timer)){
+			del_timer_sync(&debounce_timer->timer);
+		}
+		kfree(debounce_timer);
 	}
 
 	/* Release interupt lines */
@@ -271,7 +291,7 @@ static ssize_t mytraffic_read(struct file *file, char *buf, size_t len, loff_t *
        pInfo += sprintf(pInfo, "green off\n");
    }
    /* Terminate info buffer (not strictly needed for snprintf/sprintf but good for strlen) */
-   pInfo = '\0';
+   *pInfo = '\0';
 
 
    /* check user buffer size */
@@ -336,7 +356,7 @@ static ssize_t mytraffic_write(struct file *filp, const char *buf, size_t count,
 
 	/* Restart timer with new cycle rate */
 	if (mytraffic_timer) {
-		mod_timer(&mytraffic_timer->timer, jiffies + msecs_to_jiffies(1 / cycle_rate));
+		mod_timer(&mytraffic_timer->timer, jiffies + msecs_to_jiffies(1000 / cycle_rate));
 	}
 
 	*f_pos += len;
@@ -349,7 +369,20 @@ static void timer_handler(struct timer_list *timer_ptr) {
 	/* Get parent structure from the timer_list pointer */
 	struct timer_entry *entry = container_of(timer_ptr, struct timer_entry, timer);
 
-	cycle_index++;
+	if(bulb_check){
+		is_green_on = 1;
+		is_yellow_on = 1;
+		is_red_on = 1;
+
+		gpio_set_value(led_gpios[0].gpio, is_green_on);
+		gpio_set_value(led_gpios[1].gpio, is_yellow_on);
+		gpio_set_value(led_gpios[2].gpio, is_red_on);
+
+		mod_timer(&entry->timer, jiffies + msecs_to_jiffies(1000 / cycle_rate));
+		return;
+	}
+	
+	ycle_index++;
 
 	switch(current_mode) {
 		case NORMAL:
@@ -407,11 +440,12 @@ static void timer_handler(struct timer_list *timer_ptr) {
 	gpio_set_value(led_gpios[2].gpio, is_red_on);
 
 	/* Schedule next timer */
-	mod_timer(&entry->timer, jiffies + msecs_to_jiffies(1 / cycle_rate));
+	mod_timer(&entry->timer, jiffies + msecs_to_jiffies(1000 / cycle_rate));
 	return;
 }
 
 static irqreturn_t interrupt_handler(int irq, void *dev_id) {
+	mod_timer(&debounce_timer, jiffies + msecs_to_jiffies(DEBOUNCE_TIME));
 	if (dev_id == button0_dev_id) {
 		/* Handle button 0 IRQ */
 		if (is_button0_pressed) {
@@ -438,12 +472,12 @@ static irqreturn_t interrupt_handler(int irq, void *dev_id) {
 		}
 	} else if (dev_id == button1_dev_id) {
 		/* Handle button 1 IRQ */
-		if (is_button0_pressed) {
+		if (is_button1_pressed) {
 			/* Handling IRQ falling edge */
-			is_button0_pressed = 0;
+			is_button1_pressed = 0;
 		} else {
 			/* Handling IRQ rising edge */
-			is_button0_pressed = 1;
+			is_button1_pressed = 1;
 			is_ped_present = 1;
 		}
 	} else {
@@ -454,10 +488,12 @@ static irqreturn_t interrupt_handler(int irq, void *dev_id) {
 
 static void debounce_timer_handler(struct timer_list *t){
 	int b0 = gpio_get_value(button_gpios[0].gpio) ? 1 : 0;
-	int b1 = gpio_get_value(button_gpios[0].gpio) ? 1 : 0;
+	int b1 = gpio_get_value(button_gpios[1].gpio) ? 1 : 0;
 
 	/* both buttons pressed */
 	if(b0 && b1){
+		bulb_check = 1;
+
 		is_red_on = 1;
 		is_yellow_on = 1;
 		is_green_on = 1;
@@ -471,7 +507,9 @@ static void debounce_timer_handler(struct timer_list *t){
 	/* both buttons were released (falling edge) */
 	if(!b0 && !b1){
 		/* "reset" back to initial state */
-		if(is_green_on && is_yellow_on && is_red_on){
+		if(bulb_check){
+			bulb_check = 0;
+
 			current_mode = NORMAL;
 			cycle_rate = 1;
 			is_ped_present = 0;
@@ -490,5 +528,9 @@ static void debounce_timer_handler(struct timer_list *t){
 			}
 		}
 		return;
+	}
+
+	if(bulb_check){
+		bulb_check = 0;
 	}
 }
