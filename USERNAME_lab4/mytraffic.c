@@ -53,13 +53,6 @@ struct timer_entry {
 	struct list_head list;
 };
 
-/* GPIO structure */
-struct gpio {
-        unsigned        gpio;
-        unsigned long   flags;
-        const char      *label;
-};
-
 /* Global driver variables */
 static int mytraffic_major = 61;
 static struct timer_entry *mytraffic_timer = NULL;
@@ -67,8 +60,6 @@ static unsigned is_green_on = 0;
 static unsigned is_yellow_on = 0;
 static unsigned is_red_on = 0;
 static unsigned is_ped_present = 0;
-static unsigned cycle_index_ped = 0;
-static unsigned reset = 0;
 static unsigned cycle_index_ped = 0;
 static unsigned cycle_index = 0;
 static unsigned cycle_rate = MIN_HZ;
@@ -433,12 +424,12 @@ static irqreturn_t interrupt_handler(int irq, void *dev_id) {
 		}
 	} else if (dev_id == button1_dev_id) {
 		/* Handle button 1 IRQ */
-		if (is_button0_pressed) {
+		if (is_button1_pressed) {
 			/* Handling IRQ falling edge */
-			is_button0_pressed = 0;
+			is_button1_pressed = 0;
 		} else {
 			/* Handling IRQ rising edge */
-			is_button0_pressed = 1;
+			is_button1_pressed = 1;
 			is_ped_present = 1;
 		}
 	} else {
