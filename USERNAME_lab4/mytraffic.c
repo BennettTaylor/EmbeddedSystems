@@ -13,10 +13,10 @@
 #include <linux/string.h>
 
 /* led & gpio headers */
-#include <linux/platform_device.h>
 #include <linux/gpio/consumer.h>
 #include <linux/leds.h>
 #include <linux/leds-gpio.h>
+#include <linux/gpio.h>
 
 MODULE_LICENSE("Dual BSD/GPL");
 
@@ -28,6 +28,11 @@ MODULE_LICENSE("Dual BSD/GPL");
 #define WRITE_BUF_SIZE 2
 #define INFO_BUF_SIZE 256
 
+/* LED GPIO pins */
+#define RED_GPIO 67
+#define YELLOW_GPIO 68
+#define GREEN_GPIO 44
+
 /* Function declarations */
 static int mytraffic_init(void);
 static void mytraffic_exit(void);
@@ -36,10 +41,6 @@ static int mytraffic_release(struct inode *, struct file *);
 static ssize_t mytraffic_read(struct file *file, char *buf, size_t len, loff_t *offset);
 static ssize_t mytraffic_write(struct file *, const char *, size_t, loff_t *);
 static void timer_handler(struct timer_list *);
-
-/* led & gpio function declarations */
-static int myled_init(void);
-static void myled_exit(void);
 
 /* Operational modes enum */
 typedef enum {
@@ -52,29 +53,6 @@ typedef enum {
 struct timer_entry {
 	struct timer_list timer;
 	struct list_head list;
-};
-
-// ref: https://stackoverflow.com/questions/33310236/configure-parameters-of-led-trigger-from-kernel-space
-/* Individual GPIO LED structs */
-static struct gpio_led myleds[] __init_data = {
-	{
-		.name = "my-led1",
-		.gpio = 67,
-	},
-	{
-		.name = "my-led2",
-		.gpio = 68,
-	},
-	{
-		.name = "my-led3",
-		.gpio = 44,
-	}
-};
-
-/* Platform data for LEDs */
-struct gpio_led_platform_data myled_pdata = {
-	.num_leds = 3,
-	.leds = myleds,
 };
 
 /* Global driver variables */
