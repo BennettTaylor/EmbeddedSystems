@@ -55,8 +55,6 @@ struct timer_entry {
 	struct list_head list;
 };
 
-<<<<<<< HEAD
-=======
 /* Debounce timer structure */
 static struct timer_list debounce_timer; // for debouncing buttons
 
@@ -67,7 +65,6 @@ struct gpio {
         const char      *label;
 };
 
->>>>>>> 321393d (Added debouncer timer for buttons and skeleton of debounce_timer_handler)
 /* Global driver variables */
 static int mytraffic_major = 61;
 static struct timer_entry *mytraffic_timer = NULL;
