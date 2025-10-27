@@ -54,6 +54,29 @@ struct timer_entry {
 	struct list_head list;
 };
 
+// ref: https://stackoverflow.com/questions/33310236/configure-parameters-of-led-trigger-from-kernel-space
+/* Individual GPIO LED structs */
+static struct gpio_led myleds[] __init_data = {
+	{
+		.name = "my-led1",
+		.gpio = 67,
+	},
+	{
+		.name = "my-led2",
+		.gpio = 68,
+	},
+	{
+		.name = "my-led3",
+		.gpio = 44,
+	}
+};
+
+/* Platform data for LEDs */
+struct gpio_led_platform_data myled_pdata = {
+	.num_leds = 3,
+	.leds = myleds,
+};
+
 /* Global driver variables */
 static int mytraffic_major = 61;
 static struct timer_entry *mytraffic_timer = NULL;
@@ -318,4 +341,17 @@ static void timer_handler(struct timer_list *timer_ptr) {
 
 	mod_timer(&entry->timer, jiffies + msecs_to_jiffies(1 / cycle_rate));
 	return;
+}
+
+// LED/GPIO init
+static int myled_init(void){
+	struct platform_device *pdev;
+	int ret;
+
+	pdev = platform_device_alloc("leds-gpio", -1);
+	if(!pdev){
+		return -ENOMEM;
+	}
+
+	
 }
