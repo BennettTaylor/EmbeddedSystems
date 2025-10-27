@@ -453,5 +453,42 @@ static irqreturn_t interrupt_handler(int irq, void *dev_id) {
 }
 
 static void debounce_timer_handler(struct timer_list *t){
-	
+	int b0 = gpio_get_value(button_gpios[0].gpio) ? 1 : 0;
+	int b1 = gpio_get_value(button_gpios[0].gpio) ? 1 : 0;
+
+	/* both buttons pressed */
+	if(b0 && b1){
+		is_red_on = 1;
+		is_yellow_on = 1;
+		is_green_on = 1;
+		
+		gpio_set_value(led_gpios[0].gpio, is_green_on);
+		gpio_set_value(led_gpios[1].gpio, is_yellow_on);
+		gpio_set_value(led_gpios[2].gpio, is_red_on);
+		return;
+	}
+
+	/* both buttons were released (falling edge) */
+	if(!b0 && !b1){
+		/* "reset" back to initial state */
+		if(is_green_on && is_yellow_on && is_red_on){
+			current_mode = NORMAL;
+			cycle_rate = 1;
+			is_ped_present = 0;
+			cycle_index = 0;
+
+			is_green_on = 1;
+			is_yellow_on = 0;
+			is_red_on = 0;
+
+			gpio_set_value(led_gpios[0].gpio, is_green_on);
+			gpio_set_value(led_gpios[1].gpio, is_yellow_on);
+			gpio_set_value(led_gpios[2].gpio, is_red_on);
+
+			if(mytraffic_timer){
+				mod_timer(&mytraffic_timer->timer, jiffies + msecs_to_jiffies(1000 / cycle_rate));
+			}
+		}
+		return;
+	}
 }
