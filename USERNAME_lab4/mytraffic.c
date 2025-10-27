@@ -11,12 +11,9 @@
 #include <linux/list.h>
 #include <linux/timer.h>
 #include <linux/string.h>
-
-/* led & gpio headers */
-#include <linux/gpio/consumer.h>
-#include <linux/leds.h>
-#include <linux/leds-gpio.h>
+#include <linux/device.h>
 #include <linux/gpio.h>
+#include <linux/interrupt.h>
 
 MODULE_LICENSE("Dual BSD/GPL");
 
@@ -27,11 +24,11 @@ MODULE_LICENSE("Dual BSD/GPL");
 #define MIN_HZ 1
 #define WRITE_BUF_SIZE 2
 #define INFO_BUF_SIZE 256
-
-/* LED GPIO pins */
-#define RED_GPIO 67
-#define YELLOW_GPIO 68
-#define GREEN_GPIO 44
+#define GRN 44
+#define YLW 68
+#define RED 67
+#define BTN0 26
+#define BTN1 46
 
 /* Function declarations */
 static int mytraffic_init(void);
@@ -41,6 +38,7 @@ static int mytraffic_release(struct inode *, struct file *);
 static ssize_t mytraffic_read(struct file *file, char *buf, size_t len, loff_t *offset);
 static ssize_t mytraffic_write(struct file *, const char *, size_t, loff_t *);
 static void timer_handler(struct timer_list *);
+static irqreturn_t interrupt_handler(int, void *);
 
 /* Operational modes enum */
 typedef enum {
@@ -55,6 +53,13 @@ struct timer_entry {
 	struct list_head list;
 };
 
+/* GPIO structure */
+struct gpio {
+        unsigned        gpio;
+        unsigned long   flags;
+        const char      *label;
+};
+
 /* Global driver variables */
 static int mytraffic_major = 61;
 static struct timer_entry *mytraffic_timer = NULL;
@@ -62,10 +67,27 @@ static unsigned is_green_on = 0;
 static unsigned is_yellow_on = 0;
 static unsigned is_red_on = 0;
 static unsigned is_ped_present = 0;
+static unsigned cycle_index_ped = 0;
 static unsigned reset = 0;
+static unsigned cycle_index_ped = 0;
 static unsigned cycle_index = 0;
 static unsigned cycle_rate = MIN_HZ;
 static mytraffic_mode current_mode = NORMAL;
+static size_t num_led_gpios = 3;
+static struct gpio led_gpios[] = {
+        { GRN, GPIOF_OUT_INIT_LOW,  "Green LED" },
+        { YLW, GPIOF_OUT_INIT_LOW,  "Yellow LED"   },
+        { RED, GPIOF_OUT_INIT_LOW,  "Red LED"  }
+};
+static size_t num_button_gpios = 2;
+static struct gpio button_gpios[] = {
+        { BTN0, GPIOF_DIR_IN, "Button 0" },
+        { BTN1, GPIOF_DIR_IN,  "Button 1" }
+};
+static unsigned is_button0_pressed = 0;
+static unsigned is_button1_pressed = 0;
+static void *button0_dev_id = (void *)"button0";
+static void *button1_dev_id = (void *)"button1";
 
 
 /* Character device file operations */
@@ -89,6 +111,8 @@ module_exit(mytraffic_exit);
 /* Module init */
 static int mytraffic_init(void) {
 	int result;
+	int button0_irq;
+	int button1_irq;
 
 	/* Register device */
 	result = register_chrdev(mytraffic_major, DEVICE_NAME, &mytraffic_dev_fops);
@@ -105,11 +129,43 @@ static int mytraffic_init(void) {
 	}
 	timer_setup(&mytraffic_timer->timer, timer_handler, 0);
 
+	/* Request LED GPIOs */
+	result = gpio_request_array(led_gpios, num_led_gpios);
+	if (result < 0) {
+		printk(KERN_ALERT "mytraffic: can't obtain LED GPIO pins.\n");
+		return result;
+	}
+
+	/* Request button GPIOs */
+	result = gpio_request_array(button_gpios, num_button_gpios);
+	if (result < 0) {
+		printk(KERN_ALERT "mytraffic: can't obtain button GPIO pins.\n");
+		return result;
+	}
+
+	/* Set up button interupt handling */
+	button0_irq = gpio_to_irq(button_gpios[0].gpio);
+	button1_irq = gpio_to_irq(button_gpios[1].gpio);
+
+	result = request_irq(button0_irq, interrupt_handler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "button0_irq", button0_dev_id);
+	if (result < 0) {
+		printk(KERN_ALERT "mytraffic: can't obtain button 0 IRQ.\n");
+		return result;
+	}
+
+	result = request_irq(button1_irq, interrupt_handler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "button1_irq", button1_dev_id);
+	if (result < 0) {
+		printk(KERN_ALERT "mytraffic: can't obtain button 0 IRQ.\n");
+		return result;
+	}
+
 	return SUCCESS;
 }
 
 /* Module exit */
 static void mytraffic_exit(void) {
+	int button0_irq;
+	int button1_irq;
 
 	/* Unregister device */
 	unregister_chrdev(mytraffic_major, DEVICE_NAME);
@@ -121,6 +177,16 @@ static void mytraffic_exit(void) {
 		}
 		kfree(mytraffic_timer);
 	}
+
+	/* Release interupt lines */
+	button0_irq = gpio_to_irq(button_gpios[0].gpio);
+	button1_irq = gpio_to_irq(button_gpios[1].gpio);
+	free_irq(button0_irq, button0_dev_id);
+	free_irq(button1_irq, button1_dev_id);
+
+	/* Free GPIO arrays */
+	gpio_free_array(led_gpios, num_led_gpios);
+	gpio_free_array(button_gpios, num_button_gpios);
 
 	return;
 }
@@ -292,9 +358,22 @@ static void timer_handler(struct timer_list *timer_ptr) {
 				is_yellow_on = 1;
 				is_red_on = 0;
 			} else if (cycle_index > 3 && cycle_index < 6) {
-				is_green_on = 0;
-				is_yellow_on = 0;
-				is_red_on = 1;
+				/* Handle predestrian present if necessary */
+				if (is_ped_present) {
+					is_green_on = 0;
+					is_yellow_on = 1;
+					is_red_on = 1;
+					cycle_index = 4;
+					cycle_index_ped++;
+					if (cycle_index_ped == 5) {
+						is_ped_present = 0;
+						cycle_index = 5;
+					}
+				} else {
+					is_green_on = 0;
+					is_yellow_on = 0;
+					is_red_on = 1;
+				}
 			}
 			else if (cycle_index >= 6) {
 				cycle_index = 0;
@@ -315,21 +394,55 @@ static void timer_handler(struct timer_list *timer_ptr) {
 			is_yellow_on = 0;
 			is_red_on = !is_red_on;
 			break;
-		}
+	}
 
+	/* Set LEDs */
+	gpio_set_value(led_gpios[0].gpio, is_green_on);
+	gpio_set_value(led_gpios[1].gpio, is_yellow_on);
+	gpio_set_value(led_gpios[2].gpio, is_red_on);
+
+	/* Schedule next timer */
 	mod_timer(&entry->timer, jiffies + msecs_to_jiffies(1 / cycle_rate));
 	return;
 }
 
-// LED/GPIO init
-static int myled_init(void){
-	struct platform_device *pdev;
-	int ret;
+static irqreturn_t interrupt_handler(int irq, void *dev_id) {
+	if (dev_id == button0_dev_id) {
+		/* Handle button 0 IRQ */
+		if (is_button0_pressed) {
+			/* Handling IRQ falling edge */
+			is_button0_pressed = 0;
+		} else {
+			/* Handling IRQ rising edge */
+			is_button0_pressed = 1;
+			is_ped_present = 0;
+			cycle_index_ped = 0;
 
-	pdev = platform_device_alloc("leds-gpio", -1);
-	if(!pdev){
-		return -ENOMEM;
+			/* Change operational mode */
+			switch(current_mode) {
+				case NORMAL:
+					current_mode = FLASHING_YELLOW;
+					break;
+				case FLASHING_YELLOW:
+					current_mode = FLASHING_RED;
+					break;
+				case FLASHING_RED:
+					current_mode = NORMAL;
+					break;
+			}
+		}
+	} else if (dev_id == button1_dev_id) {
+		/* Handle button 1 IRQ */
+		if (is_button0_pressed) {
+			/* Handling IRQ falling edge */
+			is_button0_pressed = 0;
+		} else {
+			/* Handling IRQ rising edge */
+			is_button0_pressed = 1;
+			is_ped_present = 1;
+		}
+	} else {
+		return IRQ_NONE;
 	}
-
-	
+	return IRQ_HANDLED;
 }
