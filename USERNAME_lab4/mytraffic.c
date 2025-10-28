@@ -196,12 +196,7 @@ static void mytraffic_exit(void) {
 	}
 
 	/* Delete the debouncer timer if active and free its memory */
-	if(debounce_timer){
-		if(timer_pending(&debounce_timer->timer)){
-			del_timer_sync(&debounce_timer->timer);
-		}
-		kfree(debounce_timer);
-	}
+	del_timer_sync(&debounce_timer->timer);
 
 	/* Release interupt lines */
 	button0_irq = gpio_to_irq(button_gpios[0].gpio);
@@ -382,7 +377,7 @@ static void timer_handler(struct timer_list *timer_ptr) {
 		return;
 	}
 	
-	ycle_index++;
+	cycle_index++;
 
 	switch(current_mode) {
 		case NORMAL:
