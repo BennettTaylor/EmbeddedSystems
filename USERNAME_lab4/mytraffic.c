@@ -29,7 +29,7 @@ MODULE_LICENSE("Dual BSD/GPL");
 #define RED 67
 #define BTN0 26
 #define BTN1 46
-#define DEBOUNCE_TIME 50 // debounce time for buttons (in ms)
+#define DEBOUNCE_TIME 50
 
 /* Function declarations */
 static int mytraffic_init(void);
@@ -89,8 +89,8 @@ static struct gpio button_gpios[] = {
         { BTN0, GPIOF_DIR_IN, "Button 0" },
         { BTN1, GPIOF_DIR_IN,  "Button 1" }
 };
-static unsigned is_button0_pressed = 0;
-static unsigned is_button1_pressed = 0;
+static unsigned button0_state = 0;
+static unsigned button1_state = 0;
 static void *button0_dev_id = (void *)"button0";
 static void *button1_dev_id = (void *)"button1";
 
@@ -440,53 +440,27 @@ static void timer_handler(struct timer_list *timer_ptr) {
 }
 
 static irqreturn_t interrupt_handler(int irq, void *dev_id) {
+	/* Debounce interupt signal */
 	mod_timer(&debounce_timer, jiffies + msecs_to_jiffies(DEBOUNCE_TIME));
-	if (dev_id == button0_dev_id) {
-		/* Handle button 0 IRQ */
-		if (is_button0_pressed) {
-			/* Handling IRQ falling edge */
-			is_button0_pressed = 0;
-		} else {
-			/* Handling IRQ rising edge */
-			is_button0_pressed = 1;
-			is_ped_present = 0;
-			cycle_index_ped = 0;
-
-			/* Change operational mode */
-			switch(current_mode) {
-				case NORMAL:
-					current_mode = FLASHING_YELLOW;
-					break;
-				case FLASHING_YELLOW:
-					current_mode = FLASHING_RED;
-					break;
-				case FLASHING_RED:
-					current_mode = NORMAL;
-					break;
-			}
-		}
-	} else if (dev_id == button1_dev_id) {
-		/* Handle button 1 IRQ */
-		if (is_button1_pressed) {
-			/* Handling IRQ falling edge */
-			is_button1_pressed = 0;
-		} else {
-			/* Handling IRQ rising edge */
-			is_button1_pressed = 1;
-			is_ped_present = 1;
-		}
-	} else {
-		return IRQ_NONE;
-	}
 	return IRQ_HANDLED;
 }
 
 static void debounce_timer_handler(struct timer_list *t){
-	int b0 = gpio_get_value(button_gpios[0].gpio) ? 1 : 0;
-	int b1 = gpio_get_value(button_gpios[1].gpio) ? 1 : 0;
+	int button0 = gpio_get_value(button_gpios[0].gpio) ? 1 : 0;
+	int button1 = gpio_get_value(button_gpios[1].gpio) ? 1 : 0;
 
-	/* both buttons pressed */
-	if(b0 && b1){
+	/* Do nothing if state has not changed */
+	if (button0 == button0_state && button1 = button1_state) {
+		return;
+	}
+
+	int b0_rising = button0 && !button0_state;
+	int b0_falling = !button0 && button0_state;
+	int b1_rising = button1 && !button1_state;
+	int b1_falling = !button1 && button1_state;
+
+	/* Handle case where both buttons are pressed */
+	if (b0_rising && b1_state || b1_rising && b0_state) {
 		bulb_check = 1;
 
 		is_red_on = 1;
@@ -496,36 +470,70 @@ static void debounce_timer_handler(struct timer_list *t){
 		gpio_set_value(led_gpios[0].gpio, is_green_on);
 		gpio_set_value(led_gpios[1].gpio, is_yellow_on);
 		gpio_set_value(led_gpios[2].gpio, is_red_on);
-		return;
-	}
 
-	/* both buttons were released (falling edge) */
-	if(!b0 && !b1){
-		/* "reset" back to initial state */
-		if(bulb_check){
-			bulb_check = 0;
-
-			current_mode = NORMAL;
-			cycle_rate = 1;
-			is_ped_present = 0;
-			cycle_index = 0;
-
-			is_green_on = 1;
-			is_yellow_on = 0;
-			is_red_on = 0;
-
-			gpio_set_value(led_gpios[0].gpio, is_green_on);
-			gpio_set_value(led_gpios[1].gpio, is_yellow_on);
-			gpio_set_value(led_gpios[2].gpio, is_red_on);
-
-			if(mytraffic_timer){
-				mod_timer(&mytraffic_timer->timer, jiffies + msecs_to_jiffies(1000 / cycle_rate));
-			}
+		if (b1_rising) {
+			button1_state = 1;
+		}
+		if (b0_rising) {
+			button0_state = 1;
 		}
 		return;
-	}
+	} else if (b0_falling || b1_falling) {
+		/* Both buttons no longer being pressed*/
+		if (button1_state && button0_state) {
+			/* Reset back to initial state */
+			if(bulb_check){
+				bulb_check = 0;
 
-	if(bulb_check){
-		bulb_check = 0;
+				current_mode = NORMAL;
+				cycle_rate = 1;
+				is_ped_present = 0;
+				cycle_index = 0;
+
+				is_green_on = 1;
+				is_yellow_on = 0;
+				is_red_on = 0;
+
+				gpio_set_value(led_gpios[0].gpio, is_green_on);
+				gpio_set_value(led_gpios[1].gpio, is_yellow_on);
+				gpio_set_value(led_gpios[2].gpio, is_red_on);
+
+				if(mytraffic_timer){
+					mod_timer(&mytraffic_timer->timer, jiffies + msecs_to_jiffies(1000 / cycle_rate));
+				}
+			}
+		}
+		if (b0_falling) {
+			button0_state = 0;
+		}
+		if (b1_falling) {
+			button1_state = 0;
+		}
+		/* Nothing else needs to be done if a button is being released */
+		return; 
+	} else if (b0_rising) {
+		/* Handle button 0 being pressed */
+		button0_state = 1;
+
+		/* Stop pedestrian present logic */
+		is_ped_present = 0;
+		cycle_index_ped = 0;
+
+		/* Change operational mode */
+		switch(current_mode) {
+			case NORMAL:
+				current_mode = FLASHING_YELLOW;
+				break;
+			case FLASHING_YELLOW:
+				current_mode = FLASHING_RED;
+				break;
+			case FLASHING_RED:
+				current_mode = NORMAL;
+				break;
+		}
+	} else if (b1_rising) {
+		/* Handle button 1 being pressed */
+		button1_state = 1;
+		is_ped_present = 1;
 	}
 }
