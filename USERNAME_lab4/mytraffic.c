@@ -499,12 +499,12 @@ static void debounce_timer_handler(struct timer_list *t){
 		/* Change operational mode */
 		switch(current_mode) {
 			case NORMAL:
-				current_mode = FLASHING_YELLOW;
-				break;
-			case FLASHING_YELLOW:
 				current_mode = FLASHING_RED;
 				break;
 			case FLASHING_RED:
+				current_mode = FLASHING_YELLOW;
+				break;
+			case FLASHING_YELLOW:
 				current_mode = NORMAL;
 				break;
 		}
