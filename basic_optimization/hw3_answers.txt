@@ -1,0 +1,23 @@
+-------------------------------------------------------------------
+Profiling Results
+-------------------------------------------------------------------
+qsort_large spends 81.75% of its time executing the function compare based on the flat profile (average over 5 samples).
+qsort_large spends 18.38% of its time executing the function frame_dummy based on the flat profile (average over 5 samples).
+qsort_large spends 0.81% of its time executing the function main based on the flat profile (average over 5 samples).
+-------------------------------------------------------------------
+Optimization
+-------------------------------------------------------------------
++-----------------------+--------------------+--------------------+
+|Optimizations |Time on eng-grid (sys + user, average over 5 samples) |Time on BeagleBone (sys + user, average over 5 samples) |
++-----------------------+--------------------+--------------------+
+|Default | 0m0.0194s | 0m0.0562s |
++-----------------------+--------------------+--------------------+
+|myOptimization1 | 0m0.0166s | 0m0.0438s |
++-----------------------+--------------------+--------------------+
+|myOptimization2 | 0m0.0174s | 0m0.0496 |
++-----------------------+--------------------+--------------------+
+|Optional 1 & 2 combined| 0m0.0172s | 0m0.0504s |
++-----------------------+--------------------+--------------------+
+myOptimization1: My best optimization method was using a subtraction of squared distance instead of a comparison of distances. The results were the same because comparing distances and square distances always gives the same result and the compare function needs a -, 0, or + result which the subtraction provides in the same way as the comparison.
+myOptimization2: My second best optimization method was adding the -O3 optimization flag to the makefile for enabling compiler optimizations.
+Difference btw grid and embedded: Eng grid resulted in faster performace, likely because the chips that ran the code on eng grid likely more powerful, drew more power, and had a higher clock rate. This is because bbb is an arm based chip used in embedded systems rather than a dedicated desktop chip.
